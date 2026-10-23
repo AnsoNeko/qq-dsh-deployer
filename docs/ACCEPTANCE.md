@@ -33,3 +33,13 @@
 发行附件包括安装版、便携版、安装版 blockmap、`latest.yml` 和 `SHA256SUMS.txt`。发布流程先上传 Draft，再重新下载与本地摘要比对，最后发布正式 Release；发布后验证公开接口与软件更新查询。
 
 安装包未配置商业 Authenticode 签名证书；下载完整性依靠官方 GitHub Release 与摘要校验。
+
+### 本次远端结果
+
+- 公开仓库：<https://github.com/AnsoNeko/qq-dsh-deployer>。
+- 正式 Release：<https://github.com/AnsoNeko/qq-dsh-deployer/releases/tag/v0.1.0>；2026-10-23 20:09:36（北京时间）发布，非 Draft、非 Prerelease。
+- 发行源码提交：`2d05271`。后续文档提交仅补充远端验收记录，不改变已发布程序。
+- 5 个附件均从 GitHub Draft 重新下载，与本地 SHA-256 完全一致；GitHub 返回的附件摘要亦一致。
+- 发布后的实际打包程序通过 GitHub provider 读取到最新正式版本 `0.1.0`，关于窗口显示“当前已是最新正式版本”。
+- 安装版 SHA-256：`f6b002855e25a3be2a684ee1fa0a6cc97343a89865442134d2e3a91c3f26fc95`。
+- 便携版 SHA-256：`01a5d1b926299dad84c672c1258eb07e1edb534c7af09ac6723af1868a1e3555`。
