@@ -67,6 +67,20 @@ const registered = () => {
 }
 let uninstall
 try {
+  const runningApps = execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '@(Get-Process -Name "QQ大肥鱼部署助手" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) | ConvertTo-Json -Compress',
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  if (runningApps && runningApps !== '[]')
+    throw new Error(
+      'Existing deployer process detected; refusing NSIS acceptance because its close-app logic can stop an active portable app',
+    )
   const existing = registered()
   if (existing.length)
     throw new Error(

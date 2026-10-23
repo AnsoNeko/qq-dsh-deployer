@@ -30,6 +30,8 @@ import {
 } from './system'
 import { download } from './network'
 import { readSnowLumaLogin } from './snowluma'
+import { readBridgeLogin } from './bridge'
+import { mergeDetectedConnections, selectOneBotEndpoint } from './connections'
 import type {
   AppUpdate,
   ComponentResult,
@@ -48,12 +50,12 @@ export class Engine {
   logs: LogEntry[] = []
   task: Task | null = null
   appUpdate?: AppUpdate
-  version = '0.1.1'
+  version = '0.1.2'
   owned: Partial<Record<'bridge' | 'snowluma' | 'harness', ChildProcess>> = {}
   private aborter?: AbortController
   private waiter?: () => void
   private request?: DeployRequest
-  private scanning = false
+  private scanning?: Promise<ComponentResult[]>
   private mutating = false
   private bridgeRollback?: { target: string; previous: string }
   constructor(
@@ -125,8 +127,10 @@ export class Engine {
     this.emit()
   }
   async scan(): Promise<ComponentResult[]> {
-    if (this.scanning) return this.scanner.results
-    this.scanning = true
+    if (!this.scanning) this.scanning = this.scanOnce()
+    return this.scanning
+  }
+  private async scanOnce(): Promise<ComponentResult[]> {
     try {
       const result = await this.scanner.scan(this.store.settings)
       this.log(
@@ -134,7 +138,7 @@ export class Engine {
       )
       return result
     } finally {
-      this.scanning = false
+      this.scanning = undefined
       this.emit()
     }
   }
@@ -162,6 +166,156 @@ export class Engine {
       this.resolveSettings().snowlumaPath,
       path.join(this.store.root, 'snowluma-local.log'),
     )
+  }
+  async bridgeLogin() {
+    const s = this.resolveSettings()
+    return readBridgeLogin(s.bridgePath, s.consolePort)
+  }
+  async openBridgeConsole(waitForStartup = false): Promise<void> {
+    const deadline = Date.now() + (waitForStartup ? 10000 : 0)
+    do {
+      const login = await this.bridgeLogin()
+      if (login.state === 'ready') {
+        let ready = !waitForStartup
+        if (waitForStartup)
+          try {
+            const response = await fetch(login.consoleUrl + '/api/status', {
+              headers: { 'x-console-token': login.token },
+              signal: AbortSignal.timeout(1000),
+            })
+            const status = response.ok ? await response.json() : null
+            ready = typeof status?.dshReady === 'boolean'
+          } catch {
+            /* the process may still be starting */
+          }
+        if (ready) {
+          const url = new URL(login.consoleUrl)
+          url.searchParams.set('token', login.token)
+          try {
+            await this.openExternal(url.href)
+          } catch {
+            throw new Error('无法打开 QQ Bridge 控制台，请稍后通过运行管理重试')
+          }
+          return
+        }
+      } else if (!waitForStartup || login.state === 'unavailable') throw new Error(login.detail)
+      if (Date.now() >= deadline) break
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    } while (Date.now() < deadline)
+    throw new Error(
+      'QQ Bridge 已提交启动，控制台暂未就绪；请稍后点击打开控制台，助手会自动带入令牌',
+    )
+  }
+  async syncEnvironment(): Promise<Settings> {
+    if (this.mutating || (this.task && ['running', 'waiting'].includes(this.task.state)))
+      throw new Error('已有配置或部署操作进行中，请完成后再同步环境')
+    this.mutating = true
+    try {
+      return await this.applyDetectedEnvironment(undefined, true)
+    } finally {
+      this.mutating = false
+      this.emit()
+    }
+  }
+  private async applyDetectedEnvironment(
+    signal?: AbortSignal,
+    restartOwned = false,
+  ): Promise<Settings> {
+    const results = await this.scan()
+    signal?.throwIfAborted()
+    const previousSettings = this.store.settings
+    const previousSecrets = this.store.secrets
+    const s = { ...previousSettings }
+    const pathKeys = {
+      node: 'nodePath',
+      powershell: 'pwshPath',
+      harness: 'harnessPath',
+      snowluma: 'snowlumaPath',
+      bridge: 'bridgePath',
+      qq: 'qqPath',
+    } as const
+    for (const [id, key] of Object.entries(pathKeys)) {
+      const detected = results.find((item) => item.id === id)?.path
+      if (detected) s[key] = detected
+    }
+    const harnessVerified =
+      results.some((item) => item.id === 'harness' && item.state === 'ok') &&
+      !!this.scanner.discovered.dshUrl
+    if (harnessVerified) s.dshUrl = this.scanner.discovered.dshUrl
+    const file = s.bridgePath ? path.join(s.bridgePath, 'config.json') : ''
+    let old: any = null
+    try {
+      old = file ? await json(file) : null
+    } catch {
+      throw new Error('无法读取现有桥接配置，已保留原文件；请修复配置文件后重新同步')
+    }
+    // Keep the assistant aligned with settings edited in the upstream console,
+    // so an automatic owned-process restart cannot overwrite them afterwards.
+    if (old) {
+      if (old.ownerQQ !== undefined) s.ownerQQ = String(old.ownerQQ)
+      if (Array.isArray(old.allow?.groups)) s.groups = old.allow.groups.join(', ')
+      if (Array.isArray(old.allow?.private)) s.friends = old.allow.private.join(', ')
+      if (typeof old.dsh?.model === 'string' && old.dsh.model) s.model = old.dsh.model
+    }
+    if (Number.isInteger(old?.consolePort) && old.consolePort >= 1024 && old.consolePort <= 65535)
+      s.consolePort = old.consolePort
+    let endpoints: Awaited<ReturnType<typeof readOneBot>> = []
+    try {
+      endpoints = s.snowlumaPath ? await readOneBot(s.snowlumaPath) : []
+    } catch {
+      throw new Error('无法读取 SnowLuma 的 OneBot 配置，已保留现有连接；请检查配置文件后重新同步')
+    }
+    const endpoint =
+      selectOneBotEndpoint(endpoints, s.httpUrl) ||
+      (old?.snowluma?.httpUrl ? selectOneBotEndpoint(endpoints, old.snowluma.httpUrl) : undefined)
+    if (endpoints.length > 1 && !endpoint)
+      this.log(
+        '发现多个 OneBot 配置且无法唯一匹配，已保留现有连接；请在连接配置中选择目标端点后重新同步',
+        'warn',
+      )
+    if (endpoint) {
+      s.httpUrl = endpoint.httpUrl
+      s.wsUrl = endpoint.wsUrl
+    }
+    const secrets = endpoint
+      ? { ...previousSecrets, httpToken: endpoint.httpToken, wsToken: endpoint.wsToken }
+      : previousSecrets
+    const next = old ? mergeDetectedConnections(old, s, harnessVerified, endpoint) : null
+    const bridgeChanged = !!old && JSON.stringify(next) !== JSON.stringify(old)
+    const settingsChanged =
+      JSON.stringify(s) !== JSON.stringify(previousSettings) ||
+      JSON.stringify(secrets) !== JSON.stringify(previousSecrets)
+    const backup = bridgeChanged
+      ? await this.store.createBackup('自动应用实际连接配置', [file])
+      : null
+    try {
+      signal?.throwIfAborted()
+      if (bridgeChanged) await writeJson(file, next)
+      if (bridgeChanged || settingsChanged) await this.store.save(s, secrets)
+      if (backup) await this.store.finishBackup(backup)
+    } catch (error) {
+      if (backup) await this.store.restore(backup.id, true)
+      this.store.settings = previousSettings
+      this.store.secrets = previousSecrets
+      throw error
+    }
+    this.log('已扫描环境并应用实际程序路径和已确认的连接配置；管理员、白名单、模型和其他配置已保留')
+    if (!harnessVerified)
+      this.log('Harness API 尚未验证，已保留现有地址；通过助手启动桥接时会重新检测', 'warn')
+    if (restartOwned && bridgeChanged && this.owned.bridge?.exitCode === null) {
+      signal?.throwIfAborted()
+      await this.stopOwned('bridge')
+      await this.startService('bridge')
+      await this.scan()
+      this.log('已重启助手管理的桥接，使检测到的连接配置生效')
+    } else if (
+      bridgeChanged &&
+      results.some((item) => item.id === 'bridge' && ['ok', 'waiting'].includes(item.state))
+    ) {
+      this.log('桥接连接配置已更新；外部启动的桥接需要在其原启动入口重启后生效', 'warn')
+    }
+    this.emit()
+    return { ...this.store.settings }
   }
   async saveConfig(input: ConfigInput): Promise<Settings> {
     if (this.mutating || (this.task && ['running', 'waiting'].includes(this.task.state)))
@@ -358,6 +512,11 @@ export class Engine {
         state: previous?.steps.find((p) => p.id === v.id)?.state === 'done' ? 'done' : 'pending',
       })),
     }
+    this.task.steps.push({
+      id: 'sync-environment',
+      title: '扫描环境并应用实际连接配置',
+      state: 'pending',
+    })
     this.aborter = new AbortController()
     this.emit()
     void this.runTask()
@@ -381,7 +540,22 @@ export class Engine {
           step.progress = n
           this.emit()
         }
-        await this.perform(step.id as DeployAction, signal, progress)
+        if (step.id === 'sync-environment') {
+          if (this.request?.actions.includes('plugins')) {
+            await this.startService('harness')
+            await this.scan()
+            while (
+              !this.scanner.results.some((item) => item.id === 'harness' && item.state === 'ok')
+            ) {
+              await this.wait(
+                '请在 Harness 桌面版完成首次登录和启动，完成后点击继续；助手会验证 API 并自动应用实际连接地址。',
+                signal,
+              )
+              await this.scan()
+            }
+          }
+          await this.applyDetectedEnvironment(signal, true)
+        } else await this.perform(step.id as DeployAction, signal, progress)
         step.state = 'done'
         step.progress = 100
         await this.persistTask()
@@ -731,11 +905,15 @@ export class Engine {
     id: 'bridge' | 'snowluma' | 'harness',
     action: 'start' | 'stop' | 'restart',
   ): Promise<void> {
-    if (this.task && ['running', 'waiting'].includes(this.task.state))
+    if (this.mutating || (this.task && ['running', 'waiting'].includes(this.task.state)))
       throw new Error('请先完成或取消部署任务')
     if (action === 'stop' || action === 'restart') await this.stopOwned(id)
     if (action === 'start' || action === 'restart') await this.startService(id)
     this.emit()
+    if (id === 'bridge' && action !== 'stop') {
+      await this.openBridgeConsole(true)
+      await this.scan()
+    }
   }
   async stopOwned(id: 'bridge' | 'snowluma' | 'harness'): Promise<void> {
     const child = this.owned[id]
@@ -744,7 +922,7 @@ export class Engine {
       return
     }
     await command('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeout: 10000 })
-    delete this.owned[id]
+    if (this.owned[id] === child) delete this.owned[id]
     this.log(`${id} 已停止`)
     this.emit()
   }
@@ -753,6 +931,9 @@ export class Engine {
       this.log(`${id} 已由助手启动`)
       return
     }
+    // Desktop Harness may choose a new API port on every launch. Refresh before
+    // resolving settings and writing the bridge config, rather than reusing a stale scan.
+    if (id === 'bridge') await this.applyDetectedEnvironment()
     const s = this.resolveSettings()
     let exe = ''
     let args: string[] = []
@@ -802,7 +983,7 @@ export class Engine {
     this.log(`${id} 详细输出保存在本机 ${id}-local.log，不进入诊断导出。可从数据目录查看。`)
     child.on('error', (e) => this.log(`${id} 启动失败：${e.message}`, 'error'))
     child.on('exit', (code) => {
-      delete this.owned[id]
+      if (this.owned[id] === child) delete this.owned[id]
       this.log(`${id} 进程已退出（${code}）`, code === 0 ? 'info' : 'warn')
     })
     await this.store.save(s)

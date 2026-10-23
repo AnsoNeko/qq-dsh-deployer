@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import net from 'node:net'
 import { Engine } from '../src/main/engine'
 import { Store } from '../src/main/store'
 import { writeJson } from '../src/main/core'
@@ -32,6 +33,33 @@ afterEach(async () => {
   await fs.rm(root, { force: true, recursive: true })
 })
 describe('deployment task lifecycle', () => {
+  it('refreshes the Harness API address before writing bridge startup config after a restart', async () => {
+    const listener = net.createServer()
+    await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve))
+    const port = (listener.address() as net.AddressInfo).port
+    await new Promise<void>((resolve) => listener.close(() => resolve()))
+    Object.assign(engine.store.settings, {
+      bridgePath: path.join(root, 'bridge'),
+      nodePath: process.execPath,
+      consolePort: port,
+      ownerQQ: '1234567',
+      groups: '7654321',
+      dshUrl: 'http://127.0.0.1:3080',
+    })
+    engine.scanner.discovered.dshUrl = 'http://127.0.0.1:40001'
+    vi.mocked(engine.scan).mockImplementation(async () => {
+      engine.scanner.discovered.dshUrl = 'http://127.0.0.1:40002'
+      return []
+    })
+    const configure = vi
+      .spyOn(engine as any, 'ensureBridgeConfig')
+      .mockRejectedValue(new Error('fixture stops before spawn'))
+    await expect(engine.startService('bridge')).rejects.toThrow('fixture stops before spawn')
+    expect(engine.scan).toHaveBeenCalledOnce()
+    expect(configure).toHaveBeenCalledWith(
+      expect.objectContaining({ dshUrl: 'http://127.0.0.1:40002' }),
+    )
+  })
   it('waits for the user, resumes and persists completion', async () => {
     vi.spyOn(engine as any, 'perform').mockImplementation(async (_id, signal) =>
       engine.wait('等待测试用户', signal as AbortSignal),

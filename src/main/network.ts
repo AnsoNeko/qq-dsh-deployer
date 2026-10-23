@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { localUrl } from './core'
 import WebSocket from 'ws'
+import type { Health } from '../shared/types'
 
 const allowed = [
   'github.com',
@@ -175,6 +176,36 @@ export async function localRpc(
     req.on('error', reject)
     req.end(JSON.stringify(body))
   })
+}
+export async function probeBridge(
+  base: string,
+  token: string,
+): Promise<{ state: Health; detail: string }> {
+  try {
+    const response = await fetch(localUrl(base) + '/api/status', {
+      signal: AbortSignal.timeout(2500),
+      headers: { 'x-console-token': token },
+    })
+    if (response.status === 401 || response.status === 403)
+      return { state: 'error', detail: '桥接控制台令牌鉴权失败，请检查当前安装的控制台令牌' }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+    if (typeof data.dshReady !== 'boolean' || typeof data.mode !== 'string')
+      return { state: 'error', detail: '此端口未返回有效的 QQ Bridge 控制台状态' }
+    if (!data.dshReady)
+      return {
+        state: 'waiting',
+        detail:
+          '桥接已启动，但未连接 Harness；请确认 Harness 已启动，再通过助手重启桥接以重新检测 API 地址',
+      }
+    if (data.snowluma?.degraded)
+      return { state: 'error', detail: 'Harness 已连接，但 SnowLuma 上游退化' }
+    if (data.snowluma?.connected !== true)
+      return { state: 'waiting', detail: 'Harness 已连接，等待 SnowLuma 网关连接' }
+    return { state: 'ok', detail: 'Harness 与 SnowLuma 已连接 · 消息往返待实测' }
+  } catch {
+    return { state: 'stopped', detail: '桥接控制台不可用，请启动桥接或检查控制台端口' }
+  }
 }
 export async function probeOneBot(
   base: string,

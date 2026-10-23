@@ -6,7 +6,7 @@ import path from 'node:path'
 import os from 'node:os'
 import yaml from 'js-yaml'
 import { WebSocketServer } from 'ws'
-import { probeOneBot, probeWs } from '../src/main/network'
+import { probeBridge, probeOneBot, probeWs } from '../src/main/network'
 import { loadBridgeApi } from '../src/main/scanner'
 const servers: http.Server[] = []
 const roots: string[] = []
@@ -28,6 +28,46 @@ async function server(handler: http.RequestListener) {
   return { server: s, url: `http://127.0.0.1:${(s.address() as any).port}` }
 }
 describe('actual loopback protocol probes', () => {
+  it.each([
+    {
+      dshReady: false,
+      connected: true,
+      degraded: false,
+      state: 'waiting',
+      detail: '未连接 Harness',
+    },
+    {
+      dshReady: true,
+      connected: false,
+      degraded: false,
+      state: 'waiting',
+      detail: '等待 SnowLuma',
+    },
+    { dshReady: true, connected: true, degraded: true, state: 'error', detail: '上游退化' },
+    { dshReady: true, connected: true, degraded: false, state: 'ok', detail: '已连接' },
+  ])(
+    'authenticates bridge status and reports $state',
+    async ({ dshReady, connected, degraded, state, detail }) => {
+      const { url } = await server((req, res) => {
+        expect(req.url).toBe('/api/status')
+        expect(req.headers['x-console-token']).toBe('bridge-console-secret')
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ mode: 'chat', dshReady, snowluma: { connected, degraded } }))
+      })
+      const result = await probeBridge(url, 'bridge-console-secret')
+      expect(result.state).toBe(state)
+      expect(result.detail).toContain(detail)
+    },
+  )
+  it('reports bridge authentication failure and rejects another service on the console port', async () => {
+    const auth = await server((_req, res) => {
+      res.statusCode = 401
+      res.end('{}')
+    })
+    expect((await probeBridge(auth.url, 'wrong')).detail).toContain('令牌鉴权失败')
+    const other = await server((_req, res) => res.end(JSON.stringify({ mode: 'unrelated' })))
+    expect((await probeBridge(other.url, '')).state).toBe('error')
+  })
   it.each([
     { online: true, good: true, state: 'ok' },
     { online: false, good: true, state: 'waiting' },
@@ -94,18 +134,25 @@ describe('actual loopback protocol probes', () => {
         const valid =
           token[2] === crypto.createHmac('sha256', secret).update(token[1]).digest('base64url') &&
           payload.authority === req.headers.host &&
-          req.url === '/api/agentPresets/list'
+          req.url === '/api/agentPresets/list' &&
+          request.type === 'client-request' &&
+          request.method === 'agentPresets/list' &&
+          request.payload?.args &&
+          typeof request.payload.args === 'object' &&
+          Object.keys(request.payload.args).length === 0
         res.statusCode = valid ? 200 : 401
         res.end(
           JSON.stringify({
             type: 'server-response',
             rpcId: request.rpcId,
-            result: { ok: valid, value: [{ id: 'qq-chat' }, { id: 'qq-chat-v2' }] },
+            result: { ok: !!valid, value: { presets: [{ id: 'qq-chat' }, { id: 'qq-chat-v2' }] } },
           }),
         )
       })
     })
     const api = await loadBridgeApi('', home, url)
-    expect(await api.agentPresets.list()).toEqual([{ id: 'qq-chat' }, { id: 'qq-chat-v2' }])
+    expect(await api.agentPresets.list()).toEqual({
+      presets: [{ id: 'qq-chat' }, { id: 'qq-chat-v2' }],
+    })
   })
 })

@@ -5,7 +5,8 @@ import crypto from 'node:crypto'
 import yaml from 'js-yaml'
 import { cleanVersion, compatible, exists, json, readOneBot } from './core'
 import { command, fileVersion, findFile, harnessPorts, inventory, processes, where } from './system'
-import { localRpc, probeOneBot, probeWs, remoteJson } from './network'
+import { localRpc, probeBridge, probeOneBot, probeWs, remoteJson } from './network'
+import { readBridgeLogin } from './bridge'
 import type { Candidate, ComponentId, ComponentResult, Settings } from '../shared/types'
 
 const names: Record<ComponentId, string> = {
@@ -320,23 +321,17 @@ export class Scanner {
           ? '依赖未安装完整'
           : '文件及依赖就绪，尚未验证桥接控制台'
       let state: ComponentResult['state'] = !config || !deps ? 'error' : 'stopped'
-      try {
-        const response = await fetch(`http://127.0.0.1:${s.consolePort}/api/status`, {
-          signal: AbortSignal.timeout(1800),
-          headers: {
-            authorization: `Bearer ${config?.consoleToken || (await fs.readFile(path.join(bridge, 'state/console-token'), 'utf8').catch(() => '')).trim()}`,
-          },
-        })
-        if (response.ok) {
-          const data: any = await response.json()
-          if ('snowluma' in data || 'mode' in data) {
-            state = data.snowluma?.degraded ? 'error' : 'ok'
-            detail = data.snowluma?.degraded
-              ? '桥接运行中，网关上游退化'
-              : '桥接控制台可用 · 消息往返待实测'
-          }
+      if (config && deps) {
+        const login = await readBridgeLogin(bridge, s.consolePort)
+        if (login.state === 'ready') {
+          const health = await probeBridge(login.consoleUrl, login.token)
+          state = health.state
+          detail = health.detail
+        } else {
+          state = login.state === 'unavailable' ? 'error' : 'stopped'
+          detail = login.detail
         }
-      } catch {}
+      }
       add('bridge', {
         path: bridge,
         version: bv,
@@ -436,7 +431,7 @@ export async function loadBridgeApi(_bridge: string, home: string, url: string):
           type: 'client-request',
           rpcId,
           method,
-          payload: {},
+          payload: { args: {} },
         })
         if (
           response.type !== 'server-response' ||

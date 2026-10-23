@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { scryptSync } from 'node:crypto'
+import net from 'node:net'
 const root = path.resolve(import.meta.dirname, '..')
 const output = path.join(root, 'output/playwright')
 await fs.mkdir(output, { recursive: true })
@@ -223,6 +224,158 @@ try {
     'SnowLuma password is excluded from activity logs',
     !(await fs.readFile(path.join(data, 'activity.log'), 'utf8')).includes(snowPassword),
   )
+  // A tiny local bridge fixture verifies the real process launch, token generation,
+  // clipboard, authenticated browser URL and environment sync without sending QQ messages.
+  const bridgeHome = path.join(data, 'QQ Bridge 测试')
+  const bridgeToken = 'fixture-bridge-console-token-0123456789'
+  const nextBridgeToken = 'fixture-rotated-console-token-9876543210'
+  const listener = net.createServer()
+  await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve))
+  const bridgePort = listener.address().port
+  await new Promise((resolve) => listener.close(resolve))
+  await fs.mkdir(path.join(bridgeHome, 'src'), { recursive: true })
+  await fs.mkdir(path.join(bridgeHome, 'node_modules/js-yaml'), { recursive: true })
+  await fs.writeFile(
+    path.join(bridgeHome, 'package.json'),
+    JSON.stringify({ name: 'qqdsh-bridge-fixture', type: 'module', version: '0.2.1-r1' }),
+  )
+  await fs.writeFile(
+    path.join(bridgeHome, 'config.json'),
+    JSON.stringify({
+      consolePort: bridgePort,
+      ownerQQ: '123456789',
+      allow: { groups: ['987654321'], private: [] },
+      dsh: { baseUrl: 'http://127.0.0.1:3080', model: 'deepseek-flash' },
+      snowluma: { httpUrl: 'http://127.0.0.1:3000', wsUrl: 'ws://127.0.0.1:3001' },
+      custom: 'preserved-by-sync',
+    }),
+  )
+  await fs.writeFile(
+    path.join(bridgeHome, 'src/bridge.js'),
+    `
+import fs from 'node:fs';
+import http from 'node:http';
+const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+fs.mkdirSync('state', {recursive:true});
+if (!fs.existsSync('state/console-token')) fs.writeFileSync('state/console-token', ${JSON.stringify(bridgeToken)});
+http.createServer((req,res) => {
+  const url = new URL(req.url, 'http://127.0.0.1');
+  const token = fs.readFileSync('state/console-token', 'utf8').trim();
+  if ((url.searchParams.get('token') || req.headers['x-console-token']) !== token) {res.writeHead(401);res.end('requires console token');return;}
+  res.setHeader('content-type','application/json');
+  res.end(JSON.stringify(url.pathname === '/api/status' ? {dshReady:true,mode:'chat',snowluma:{connected:true,degraded:false}} : {authenticated:true}));
+}).listen(config.consolePort, '127.0.0.1');
+`,
+  )
+  await page.evaluate(
+    async ({ bridgeHome, node, bridgePort }) => {
+      const current = await window.deployer.snapshot()
+      await window.deployer.saveConfig({
+        settings: {
+          ...current.settings,
+          bridgePath: bridgeHome,
+          nodePath: node,
+          consolePort: bridgePort,
+        },
+        applyBridge: false,
+      })
+    },
+    { bridgeHome, node: process.execPath, bridgePort },
+  )
+  await page.getByRole('button', { name: '运行管理 启动与健康状态' }).click()
+  const bridgeLogin = page.getByRole('region', { name: 'QQ Bridge 控制台登录' })
+  await bridgeLogin.getByText('等待 QQ Bridge 首次启动', { exact: false }).waitFor()
+  await app.evaluate(({ shell }) => {
+    globalThis.__qqdshOriginalOpenExternal = shell.openExternal
+    shell.openExternal = async (url) => {
+      globalThis.__qqdshOpenedUrl = url
+    }
+  })
+  await page.evaluate(() => window.deployer.service('bridge', 'start'))
+  await bridgeLogin.getByRole('button', { name: '复制控制台令牌', exact: true }).waitFor()
+  check(
+    'bridge first-start token is shown through real IPC',
+    (await bridgeLogin.getByLabel('控制台访问令牌', { exact: true }).inputValue()) === bridgeToken,
+  )
+  const openedUrl = await app.evaluate(() => globalThis.__qqdshOpenedUrl)
+  check(
+    'starting bridge automatically opens an authenticated console URL',
+    new URL(openedUrl).searchParams.get('token') === bridgeToken && (await fetch(openedUrl)).ok,
+  )
+  check(
+    'bridge authentication remains required',
+    (await fetch(`http://127.0.0.1:${bridgePort}`)).status === 401,
+  )
+  const clipboardBeforeBridge = await app.evaluate(({ clipboard }) => clipboard.readText())
+  try {
+    await bridgeLogin.getByRole('button', { name: '复制控制台令牌', exact: true }).click()
+    await page.getByRole('alert').filter({ hasText: '控制台令牌已复制' }).waitFor()
+    check(
+      'bridge token can be copied through native clipboard',
+      (await app.evaluate(({ clipboard }) => clipboard.readText())) === bridgeToken,
+    )
+  } finally {
+    await app.evaluate(({ clipboard }, value) => clipboard.writeText(value), clipboardBeforeBridge)
+  }
+  await fs.writeFile(path.join(bridgeHome, 'state/console-token'), nextBridgeToken)
+  await page.waitForFunction(
+    async (value) => (await window.deployer.bridgeLogin()).token === value,
+    nextBridgeToken,
+  )
+  await bridgeLogin.getByRole('button', { name: '自动登录 QQ Bridge 控制台', exact: true }).click()
+  await page.waitForTimeout(200)
+  const rotatedUrl = await app.evaluate(() => globalThis.__qqdshOpenedUrl)
+  check(
+    'opening console reads the current rotated token',
+    new URL(rotatedUrl).searchParams.get('token') === nextBridgeToken &&
+      (await fetch(rotatedUrl)).ok,
+  )
+  await fs.writeFile(path.join(snowHome, 'launcher.bat'), '@echo off\r\n')
+  await fs.writeFile(
+    path.join(snowHome, 'config/onebot_5555555.json'),
+    JSON.stringify({
+      networks: {
+        httpServers: [
+          { host: '127.0.0.1', port: bridgePort + 2, accessToken: 'fixture-http-token' },
+        ],
+        wsServers: [{ host: '127.0.0.1', port: bridgePort + 3, accessToken: 'fixture-ws-token' }],
+      },
+    }),
+  )
+  await page.getByRole('button', { name: '检测并应用实际配置', exact: true }).click()
+  await page
+    .getByRole('alert')
+    .filter({ hasText: '实际连接配置已同步' })
+    .waitFor({ timeout: 60000 })
+  const synchronized = await page.evaluate(() => window.deployer.snapshot())
+  check(
+    'environment sync persists actual OneBot addresses',
+    synchronized.settings.httpUrl === `http://127.0.0.1:${bridgePort + 2}` &&
+      synchronized.settings.wsUrl === `ws://127.0.0.1:${bridgePort + 3}`,
+  )
+  const syncedBridgeConfig = JSON.parse(
+    await fs.readFile(path.join(bridgeHome, 'config.json'), 'utf8'),
+  )
+  check(
+    'environment sync preserves bridge ACL and unrelated config',
+    syncedBridgeConfig.custom === 'preserved-by-sync' &&
+      syncedBridgeConfig.ownerQQ === '123456789' &&
+      syncedBridgeConfig.allow.groups[0] === '987654321',
+  )
+  await page.getByRole('button', { name: '连接配置 账号与访问范围' }).click()
+  check(
+    'automatic configuration updates are reflected in the form',
+    (await page.getByLabel('OneBot HTTP 地址', { exact: false }).inputValue()) ===
+      synchronized.settings.httpUrl,
+  )
+  check(
+    'bridge token is excluded from general snapshots and activity logs',
+    !JSON.stringify(synchronized).includes(nextBridgeToken) &&
+      !(await fs.readFile(path.join(data, 'activity.log'), 'utf8')).includes(nextBridgeToken),
+  )
+  await page.getByRole('button', { name: '运行管理 启动与健康状态' }).click()
+  await bridgeLogin.scrollIntoViewIfNeeded()
+  await capture('11-bridge-console-login.png')
   check('no renderer exceptions', report.errors.length === 0)
   // All changes above are confined to a dedicated temporary tool-data directory.
   await fs.writeFile(
@@ -240,5 +393,19 @@ try {
   await fs.writeFile(path.join(output, 'failure-report.json'), JSON.stringify(report, null, 2))
   throw error
 } finally {
+  const page = app.windows()[0]
+  if (page)
+    await page
+      .evaluate(async () => {
+        const snapshot = await window.deployer.snapshot()
+        if (snapshot.owned.bridge) await window.deployer.service('bridge', 'stop')
+      })
+      .catch(() => {})
+  await app
+    .evaluate(({ shell }) => {
+      if (globalThis.__qqdshOriginalOpenExternal)
+        shell.openExternal = globalThis.__qqdshOriginalOpenExternal
+    })
+    .catch(() => {})
   await app.close()
 }

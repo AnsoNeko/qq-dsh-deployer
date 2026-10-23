@@ -43,6 +43,7 @@ import type {
 } from '../../shared/types'
 import { projects, releaseRepository } from '../../shared/projects'
 import { SnowLumaLoginPanel } from './SnowLumaLoginPanel'
+import { BridgeLoginPanel } from './BridgeLoginPanel'
 
 const nav: { id: Page; label: string; sub: string; icon: typeof Activity }[] = [
   { id: 'overview', label: '环境总览', sub: '检查安装与连接', icon: LayoutDashboard },
@@ -157,7 +158,7 @@ export default function App() {
     if (!api) return
     const update = (s: Snapshot) => {
       setSnap(s)
-      if (!initialized.current) {
+      if (!initialized.current || !dirty.current) {
         setDraft(s.settings)
         initialized.current = true
       }
@@ -274,6 +275,13 @@ export default function App() {
       onCopy={() =>
         void run('copy-snowluma-password', () => api.copySnowLumaPassword(), '初始密码已复制')
       }
+    />
+  )
+  const bridgeLoginPanel = (
+    <BridgeLoginPanel
+      key={snap.settings.bridgePath}
+      onOpen={() => void run('open-bridge', () => api.open('bridge'))}
+      onCopy={() => void run('copy-bridge-token', () => api.copyBridgeToken(), '控制台令牌已复制')}
     />
   )
   const pathField = (
@@ -918,6 +926,9 @@ export default function App() {
                 {page === 'deploy' &&
                   task.steps.some((step) => step.id === 'snowluma' && step.state === 'waiting') &&
                   snowlumaLoginPanel}
+                {page === 'deploy' &&
+                  task.steps.some((step) => step.id === 'bridge' && step.state === 'done') &&
+                  bridgeLoginPanel}
               </div>
             )}
           </section>
@@ -1138,6 +1149,22 @@ export default function App() {
           </section>
 
           <section hidden={page !== 'services'} aria-label="运行管理">
+            <div className="config-top">
+              <Callout>
+                部署完成后会自动扫描并应用实际配置；Harness
+                端口或网关配置变化后，也可在这里重新同步。
+              </Callout>
+              <Button
+                disabled={!!busy || active || isDirty}
+                loading={busy === 'sync-environment'}
+                onClick={() =>
+                  void run('sync-environment', () => api.syncEnvironment(), '实际连接配置已同步')
+                }
+              >
+                <RefreshCw size={14} />
+                检测并应用实际配置
+              </Button>
+            </div>
             <Callout>
               启动请求成功不代表链路健康。登录状态与消息接收情况，请通过重新检测和真实 QQ 测试确认。
             </Callout>
@@ -1201,6 +1228,7 @@ export default function App() {
               })}
             </div>
             {page === 'services' && <div className="panel">{snowlumaLoginPanel}</div>}
+            {page === 'services' && <div className="panel">{bridgeLoginPanel}</div>}
             <div className="panel acceptance">
               <ShieldCheck size={24} />
               <div>

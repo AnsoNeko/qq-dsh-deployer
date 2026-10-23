@@ -133,6 +133,9 @@ export type OpenTarget = 'harness' | 'snowluma' | 'bridge' | 'qq' | 'data' | 'do
 export type SnowLumaLogin =
   | { state: 'ready'; username: 'admin'; password: string; detail: string }
   | { state: 'waiting' | 'changed' | 'unavailable'; detail: string }
+export type BridgeLogin =
+  | { state: 'ready'; token: string; consoleUrl: string; detail: string }
+  | { state: 'waiting' | 'unavailable'; detail: string }
 export interface DeployerAPI {
   snapshot(): Promise<Snapshot>
   scan(): Promise<ComponentResult[]>
@@ -154,6 +157,9 @@ export interface DeployerAPI {
   importConfig(): Promise<Settings>
   snowlumaLogin(): Promise<SnowLumaLogin>
   copySnowLumaPassword(): Promise<void>
+  bridgeLogin(): Promise<BridgeLogin>
+  copyBridgeToken(): Promise<void>
+  syncEnvironment(): Promise<Settings>
   checkAppUpdate(): Promise<void>
   installAppUpdate(): Promise<void>
   openProject(id: string): Promise<void>

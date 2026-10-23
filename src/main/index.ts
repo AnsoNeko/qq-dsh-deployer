@@ -139,6 +139,13 @@ async function start(): Promise<void> {
     },
     importConfig: () => engine.importConfig(),
     snowlumaLogin: () => engine.snowlumaLogin(),
+    bridgeLogin: () => engine.bridgeLogin(),
+    syncEnvironment: () => engine.syncEnvironment(),
+    copyBridgeToken: async () => {
+      const login = await engine.bridgeLogin()
+      if (login.state !== 'ready') throw new Error(login.detail)
+      clipboard.writeText(login.token)
+    },
     copySnowLumaPassword: async () => {
       const login = await engine.snowlumaLogin()
       if (login.state !== 'ready') throw new Error('初始密码尚未生成或已失效，请刷新后重试')
@@ -353,7 +360,7 @@ async function openTarget(target: OpenTarget): Promise<void> {
     await shell.openExternal('http://127.0.0.1:5099')
     return
   }
-  await shell.openExternal(`http://127.0.0.1:${s.consolePort}`)
+  await engine.openBridgeConsole()
 }
 app.on('before-quit', () => {
   quitting = true

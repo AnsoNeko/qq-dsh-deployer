@@ -1,6 +1,6 @@
 {
   "name": "qq-dsh-deployer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "大肥鱼 QQ 部署助手 — 环境检测、版本检查与快速部署",
   "main": "./out/main/index.js",
   "author": "安索",
