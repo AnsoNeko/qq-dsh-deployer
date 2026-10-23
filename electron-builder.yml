@@ -1,0 +1,34 @@
+appId: cn.qqdsh.deployer
+productName: QQ大肥鱼部署助手
+publish:
+  provider: github
+  owner: AnsoNeko
+  repo: qq-dsh-deployer
+  releaseType: release
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources
+    to: catalog
+asar: true
+win:
+  target:
+    - nsis
+    - portable
+  icon: resources/icon.ico
+  signAndEditExecutable: true
+nsis:
+  artifactName: QQDshDeployer-${version}-${arch}-Setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  deleteAppDataOnUninstall: false
+  installerLanguages:
+    - zh_CN
+portable:
+  artifactName: QQDshDeployer-${version}-${arch}-Portable.${ext}
+  requestExecutionLevel: user

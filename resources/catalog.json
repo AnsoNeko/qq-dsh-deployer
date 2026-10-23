@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "powershell": {
+    "version": "7.6.8",
+    "url": "https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/PowerShell-7.6.8-win-x64.zip",
+    "sha256": "b9f074f923c499b51ec99d313da8e9ae90d17a9f3adf00c73d6189f34d908528"
+  },
+  "updatedAt": "2026-10-23",
+  "node": {
+    "version": "24.22.1",
+    "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-win-x64.zip",
+    "sha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5"
+  },
+  "snowluma": {
+    "version": "2.1.1",
+    "url": "https://github.com/SnowLuma/SnowLuma/releases/download/v2.1.1/SnowLuma-v2.1.1-win-x64.zip",
+    "sha256": "c739171f95c27706767e69ba36099707c222fcec639b46f4d59689997b527772",
+    "compatibility": "unverified"
+  },
+  "bridge": {
+    "version": "0.2.1-r1",
+    "commit": "a49877f4e58d04e47532d44b803360d0f001160d",
+    "url": "https://codeload.github.com/Derpyu520/qq-bridge/zip/a49877f4e58d04e47532d44b803360d0f001160d",
+    "sha256": "b56840c808a126d3c2d8157ce5da14c4b12b36e262b73beb1bd58d5ce47cf199"
+  },
+  "harness": {
+    "version": "0.2.1-rc.2",
+    "url": "https://download.deepseek.com/desktop/dsh-latest-windows-x64.exe",
+    "sha256": "72e4a8579f11b5428dd0a1506532777924adba7ecaacc710a7e429085796537f",
+    "publisher": "CN=\"Hangzhou DeepSeek Artificial Intelligence Co., Ltd.\", O=\"Hangzhou DeepSeek Artificial Intelligence Co., Ltd.\", L=Hangzhou, S=Zhejiang, C=CN, OID.1.3.6.1.4.1.311.60.2.1.1=Hangzhou, OID.1.3.6.1.4.1.311.60.2.1.2=Zhejiang, OID.1.3.6.1.4.1.311.60.2.1.3=CN, SERIALNUMBER=91330105MACPN4X08Y, OID.2.5.4.15=Private Organization",
+    "signerThumbprint": "84032578657219876E273E0D1BD303CFE1B82E6F"
+  },
+  "compatibility": {
+    "harness": [
+      "0.2.0-rc.2",
+      "0.2.1-rc.2"
+    ],
+    "bridge": "0.2.1-r1",
+    "evidence": "upstream-declared",
+    "realQQRoundTrip": false
+  }
+}

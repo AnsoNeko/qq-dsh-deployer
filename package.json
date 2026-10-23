@@ -1,0 +1,52 @@
+{
+  "name": "qq-dsh-deployer",
+  "version": "0.1.0",
+  "description": "大肥鱼 QQ 部署助手 — 环境检测、版本检查与快速部署",
+  "main": "./out/main/index.js",
+  "author": "安索",
+  "homepage": "https://github.com/AnsoNeko/qq-dsh-deployer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnsoNeko/qq-dsh-deployer.git"
+  },
+  "license": "MIT",
+  "scripts": {
+    "format": "prettier --write src tests scripts *.ts *.json *.yml docs README.md THIRD_PARTY_NOTICES.md",
+    "format:check": "prettier --check src tests scripts *.ts *.json *.yml docs README.md THIRD_PARTY_NOTICES.md",
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "npm run build && node scripts/verify-ui.mjs",
+    "package:win": "npm run build && electron-builder --win --x64 --publish never && node scripts/prepare-release.mjs",
+    "lock:sources": "node scripts/lock-sources.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "https-proxy-agent": "^7.0.6",
+    "js-yaml": "^4.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "semver": "^7.7.0",
+    "ws": "^8.18.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/semver": "^7.7.0",
+    "@types/ws": "^8.18.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "6.0.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vitest": "^4.0.0"
+  }
+}
