@@ -29,6 +29,7 @@ import {
   runDesktopCli,
 } from './system'
 import { download } from './network'
+import { readSnowLumaLogin } from './snowluma'
 import type {
   AppUpdate,
   ComponentResult,
@@ -47,7 +48,7 @@ export class Engine {
   logs: LogEntry[] = []
   task: Task | null = null
   appUpdate?: AppUpdate
-  version = '0.1.0'
+  version = '0.1.1'
   owned: Partial<Record<'bridge' | 'snowluma' | 'harness', ChildProcess>> = {}
   private aborter?: AbortController
   private waiter?: () => void
@@ -155,6 +156,12 @@ export class Engine {
       qqPath: s.qqPath || d.qq,
       dshUrl: d.dshUrl || s.dshUrl,
     }
+  }
+  async snowlumaLogin() {
+    return readSnowLumaLogin(
+      this.resolveSettings().snowlumaPath,
+      path.join(this.store.root, 'snowluma-local.log'),
+    )
   }
   async saveConfig(input: ConfigInput): Promise<Settings> {
     if (this.mutating || (this.task && ['running', 'waiting'].includes(this.task.state)))
@@ -600,7 +607,7 @@ export class Engine {
       await this.startService('snowluma')
       await this.openExternal('http://127.0.0.1:5099')
       await this.wait(
-        'SnowLuma 已解压并启动。请在官方 WebUI 完成协议确认、密码设置与 QQ 登录，确认 OneBot HTTP/WS 已开启后继续。',
+        'SnowLuma 已解压并启动。请复制下方「SnowLuma 后台登录」中的初始密码，登录官方 WebUI 并设置新密码、完成协议确认与 QQ 登录，确认 OneBot HTTP/WS 已开启后继续。',
         signal,
       )
       const endpoints = await readOneBot(target)

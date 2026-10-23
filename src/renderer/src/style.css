@@ -1928,6 +1928,33 @@ progress {
   color: #7b8d98;
   margin: 7px 0 0;
 }
+.snowluma-login {
+  padding: 20px;
+  min-width: 0;
+}
+.snowluma-login h3 {
+  font-size: 13px;
+  color: #426976;
+}
+.snowluma-login p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #778e99;
+  overflow-wrap: anywhere;
+  margin: 10px 0;
+}
+.snowluma-login .field {
+  max-width: 380px;
+  margin-bottom: 14px;
+}
+.snowluma-login input {
+  font-family: monospace;
+}
+.snowluma-login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .about-header strong {
   color: #426976;
   font-weight: 600;

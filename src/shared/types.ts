@@ -130,6 +130,9 @@ export interface AppUpdate {
   mode: 'installer' | 'portable' | 'development'
 }
 export type OpenTarget = 'harness' | 'snowluma' | 'bridge' | 'qq' | 'data' | 'docs' | 'snow-docs'
+export type SnowLumaLogin =
+  | { state: 'ready'; username: 'admin'; password: string; detail: string }
+  | { state: 'waiting' | 'changed' | 'unavailable'; detail: string }
 export interface DeployerAPI {
   snapshot(): Promise<Snapshot>
   scan(): Promise<ComponentResult[]>
@@ -149,6 +152,8 @@ export interface DeployerAPI {
   exportDiagnostics(): Promise<string | null>
   restore(id: string): Promise<void>
   importConfig(): Promise<Settings>
+  snowlumaLogin(): Promise<SnowLumaLogin>
+  copySnowLumaPassword(): Promise<void>
   checkAppUpdate(): Promise<void>
   installAppUpdate(): Promise<void>
   openProject(id: string): Promise<void>

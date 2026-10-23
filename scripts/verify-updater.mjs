@@ -5,9 +5,10 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import { spawn } from 'node:child_process'
 const root = path.resolve(import.meta.dirname, '..')
+const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'))
 const fixture = path.join(root, '.cache/updater-qa-' + crypto.randomUUID())
 await fs.mkdir(fixture, { recursive: true })
-const installer = path.join(root, 'dist/QQDshDeployer-0.1.0-x64-Setup.exe')
+const installer = path.join(root, `dist/QQDshDeployer-${version}-x64-Setup.exe`)
 const bytes = await fs.readFile(installer)
 const expected = crypto.createHash('sha512').update(bytes).digest('base64')
 const server = http.createServer((req, res) => {

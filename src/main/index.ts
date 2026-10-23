@@ -8,6 +8,7 @@ import {
   Tray,
   Menu,
   nativeImage,
+  clipboard,
 } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -137,6 +138,12 @@ async function start(): Promise<void> {
       return engine.saveConfig(v)
     },
     importConfig: () => engine.importConfig(),
+    snowlumaLogin: () => engine.snowlumaLogin(),
+    copySnowLumaPassword: async () => {
+      const login = await engine.snowlumaLogin()
+      if (login.state !== 'ready') throw new Error('初始密码尚未生成或已失效，请刷新后重试')
+      clipboard.writeText(login.password)
+    },
     choosePath: async (kind) => {
       z.enum(['file', 'directory']).parse(kind)
       const result = await dialog.showOpenDialog(window!, {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
+import { scryptSync } from 'node:crypto'
 const root = path.resolve(import.meta.dirname, '..')
 const output = path.join(root, 'output/playwright')
 await fs.mkdir(output, { recursive: true })
@@ -144,6 +145,84 @@ try {
     }
   })
   check('starting absent service returns actionable error', bad)
+  // Synthetic upstream output exercises the real credential IPC without starting QQ or SnowLuma.
+  const snowHome = path.join(data, 'SnowLuma 测试')
+  const snowPassword = '0123456789abcdef'
+  const salt = Buffer.alloc(16, 7)
+  const snowConfig = {
+    passwordHash: scryptSync(snowPassword, salt, 64).toString('hex'),
+    passwordSalt: salt.toString('hex'),
+    mustChangePassword: true,
+  }
+  await fs.mkdir(path.join(snowHome, 'config'), { recursive: true })
+  await fs.writeFile(path.join(snowHome, 'config', 'webui.json'), JSON.stringify(snowConfig))
+  await fs.writeFile(
+    path.join(data, 'snowluma-local.log'),
+    `[INFO] [WebUI] initial credentials: user=admin password=${snowPassword}\r\n`,
+  )
+  await page.evaluate(async (home) => {
+    const snapshot = await window.deployer.snapshot()
+    await window.deployer.saveConfig({
+      settings: { ...snapshot.settings, snowlumaPath: home },
+      applyBridge: false,
+    })
+  }, snowHome)
+  await page.getByRole('button', { name: '运行管理 启动与健康状态' }).click()
+  const login = page.getByRole('region', { name: 'SnowLuma 后台登录' })
+  await login.getByRole('button', { name: '复制初始密码', exact: true }).waitFor()
+  check(
+    'SnowLuma initial password is shown through real IPC',
+    (await login.getByLabel('后台初始密码', { exact: true }).inputValue()) === snowPassword,
+  )
+  const previousClipboard = await app.evaluate(({ clipboard }) => clipboard.readText())
+  try {
+    await login.getByRole('button', { name: '复制初始密码', exact: true }).click()
+    await page.getByRole('alert').filter({ hasText: '初始密码已复制' }).waitFor()
+    check(
+      'SnowLuma initial password can be copied',
+      (await app.evaluate(({ clipboard }) => clipboard.readText())) === snowPassword,
+    )
+  } finally {
+    await app.evaluate(({ clipboard }, value) => clipboard.writeText(value), previousClipboard)
+  }
+  await login.scrollIntoViewIfNeeded()
+  await capture('09-snowluma-login.png')
+  const snapshot = await page.evaluate(() => window.deployer.snapshot())
+  const waitingSnapshot = {
+    ...snapshot,
+    task: {
+      id: 'snowluma-ui-fixture',
+      title: '部署 SnowLuma',
+      state: 'waiting',
+      startedAt: new Date().toISOString(),
+      steps: [{ id: 'snowluma', title: '安装 SnowLuma', state: 'waiting', detail: '等待后台登录' }],
+    },
+  }
+  await app.evaluate(({ BrowserWindow }, value) => {
+    BrowserWindow.getAllWindows()[0].webContents.send('deployer:change', value)
+  }, waitingSnapshot)
+  await page.getByRole('button', { name: '快速部署 按需补齐组件' }).click()
+  await login.getByLabel('后台初始密码', { exact: true }).waitFor()
+  check('SnowLuma waiting deployment exposes login credentials', await login.isVisible())
+  await login.scrollIntoViewIfNeeded()
+  await capture('10-snowluma-deploy-login.png')
+  await fs.writeFile(
+    path.join(snowHome, 'config', 'webui.json'),
+    JSON.stringify({ ...snowConfig, mustChangePassword: false }),
+  )
+  await login.getByText('已设置后台密码', { exact: false }).waitFor()
+  check(
+    'SnowLuma password disappears after password change',
+    (await login.getByLabel('后台初始密码', { exact: true }).count()) === 0,
+  )
+  check(
+    'SnowLuma password is excluded from snapshots',
+    !JSON.stringify(snapshot).includes(snowPassword),
+  )
+  check(
+    'SnowLuma password is excluded from activity logs',
+    !(await fs.readFile(path.join(data, 'activity.log'), 'utf8')).includes(snowPassword),
+  )
   check('no renderer exceptions', report.errors.length === 0)
   // All changes above are confined to a dedicated temporary tool-data directory.
   await fs.writeFile(

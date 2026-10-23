@@ -42,6 +42,7 @@ import type {
   Snapshot,
 } from '../../shared/types'
 import { projects, releaseRepository } from '../../shared/projects'
+import { SnowLumaLoginPanel } from './SnowLumaLoginPanel'
 
 const nav: { id: Page; label: string; sub: string; icon: typeof Activity }[] = [
   { id: 'overview', label: '环境总览', sub: '检查安装与连接', icon: LayoutDashboard },
@@ -265,6 +266,16 @@ export default function App() {
       </div>
     )
   const title = nav.find((n) => n.id === page)!
+  const snowlumaLoginPanel = (
+    <SnowLumaLoginPanel
+      key={snap.settings.snowlumaPath}
+      reveal={page === 'deploy'}
+      onOpen={() => void run('open-snowluma', () => api.open('snowluma'))}
+      onCopy={() =>
+        void run('copy-snowluma-password', () => api.copySnowLumaPassword(), '初始密码已复制')
+      }
+    />
+  )
   const pathField = (
     label: string,
     key: keyof Settings,
@@ -904,6 +915,9 @@ export default function App() {
                   ))}
                 </div>
                 {task.error && <Callout tone="error">{task.error}</Callout>}
+                {page === 'deploy' &&
+                  task.steps.some((step) => step.id === 'snowluma' && step.state === 'waiting') &&
+                  snowlumaLoginPanel}
               </div>
             )}
           </section>
@@ -1186,6 +1200,7 @@ export default function App() {
                 )
               })}
             </div>
+            {page === 'services' && <div className="panel">{snowlumaLoginPanel}</div>}
             <div className="panel acceptance">
               <ShieldCheck size={24} />
               <div>

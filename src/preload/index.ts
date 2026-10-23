@@ -15,6 +15,8 @@ const api: DeployerAPI = {
   },
   saveConfig: (v) => invoke('saveConfig', v),
   importConfig: () => invoke('importConfig'),
+  snowlumaLogin: () => invoke('snowlumaLogin'),
+  copySnowLumaPassword: () => invoke('copySnowLumaPassword'),
   choosePath: (v) => invoke('choosePath', v),
   preview: (v) => invoke('preview', v),
   deploy: (v) => invoke('deploy', v),

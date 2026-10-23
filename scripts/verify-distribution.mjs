@@ -5,6 +5,7 @@ import path from 'node:path'
 import net from 'node:net'
 import crypto from 'node:crypto'
 const root = path.resolve(import.meta.dirname, '..')
+const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'))
 const base = path.join(root, '.cache/distribution-' + crypto.randomUUID())
 if (!base.startsWith(root + path.sep)) throw new Error('Test path escaped workspace')
 await fs.mkdir(base, { recursive: true })
@@ -14,6 +15,7 @@ const env = {
   ...process.env,
   QQDSH_DATA_DIR: path.join(base, 'data'),
   DSH_HOME: path.join(base, 'dsh'),
+  QQDSH_SKIP_UPDATE_CHECK: '1',
 }
 delete env.ELECTRON_RUN_AS_NODE
 const run = (exe, args, extraEnv = {}) =>
@@ -71,7 +73,10 @@ try {
       'Existing user installation detected; refusing installer acceptance over user state',
     )
   const installDir = path.join(base, 'installed')
-  await run(path.join(root, 'dist/QQDshDeployer-0.1.0-x64-Setup.exe'), ['/S', '/D=' + installDir])
+  await run(path.join(root, `dist/QQDshDeployer-${version}-x64-Setup.exe`), [
+    '/S',
+    '/D=' + installDir,
+  ])
   const installedExe = path.join(installDir, 'QQ大肥鱼部署助手.exe')
   await fs.access(installedExe)
   check('NSIS installs into an isolated workspace directory')
@@ -93,7 +98,7 @@ try {
   const port = server.address().port
   await new Promise((r) => server.close(r))
   const portable = spawn(
-    path.join(root, 'dist/QQDshDeployer-0.1.0-x64-Portable.exe'),
+    path.join(root, `dist/QQDshDeployer-${version}-x64-Portable.exe`),
     [`--remote-debugging-port=${port}`],
     {
       env: { ...env, QQDSH_DATA_DIR: path.join(base, 'portable-data') },
