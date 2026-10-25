@@ -28,7 +28,7 @@ import {
   processes,
   runDesktopCli,
 } from './system'
-import { download } from './network'
+import { downloadComponent } from './sources'
 import { readSnowLumaLogin } from './snowluma'
 import { readBridgeLogin } from './bridge'
 import { mergeDetectedConnections, selectOneBotEndpoint } from './connections'
@@ -50,7 +50,7 @@ export class Engine {
   logs: LogEntry[] = []
   task: Task | null = null
   appUpdate?: AppUpdate
-  version = '0.1.2'
+  version = '0.1.3'
   owned: Partial<Record<'bridge' | 'snowluma' | 'harness', ChildProcess>> = {}
   private aborter?: AbortController
   private waiter?: () => void
@@ -466,7 +466,10 @@ export class Engine {
     const items = actions.map((id) => ({
       id,
       title: labels[id],
-      version: this.catalog[id]?.version || this.catalog.bridge.version,
+      version:
+        id === 'harness'
+          ? '官方当前版本（安装前验证签名）'
+          : this.catalog[id]?.version || this.catalog.bridge.version,
       source: this.catalog[id]?.url || '所选 Harness 安装内的官方 dsh 命令 + 已下载桥接',
       destination: dirs[id],
       changes:
@@ -489,7 +492,12 @@ export class Engine {
                     ? '追加当前用户 PATH，保留已有条目'
                     : '仅安装独立目录，不修改 PATH',
                 ]
-              : ['校验 SHA-256 后安装', '复用已有数据，保留用户交互步骤'],
+              : id === 'harness'
+                ? [
+                    '验证官方数字签名与发布者，支持官方安装包更新',
+                    '安装包实际版本会记录在部署日志中',
+                  ]
+                : ['校验 SHA-256，摘要变化时核对官方当前摘要', '复用已有数据，保留用户交互步骤'],
     }))
     return { request: { ...request, actions }, items, warnings }
   }
@@ -651,19 +659,19 @@ export class Engine {
       await this.installPlugins(signal, options)
       return
     }
-    const source = this.catalog[id]
+    const pinnedSource = this.catalog[id]
     const ext = id === 'harness' ? 'exe' : 'zip'
-    const archive = path.join(this.store.root, 'downloads', `${id}-${source.version}.${ext}`)
-    await download(source.url, archive, source.sha256, s.proxy, signal, progress)
+    const archive = path.join(this.store.root, 'downloads', `${id}-${pinnedSource.version}.${ext}`)
+    const source = await downloadComponent(
+      id,
+      pinnedSource,
+      archive,
+      s.proxy,
+      signal,
+      progress,
+      (message) => this.log(message),
+    )
     if (id === 'harness') {
-      const signature = JSON.parse(
-        await powershell(
-          '$s=Get-AuthenticodeSignature -LiteralPath $env:QQDSH_FILE; @{status=[string]$s.Status; thumbprint=$s.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress',
-          { QQDSH_FILE: archive },
-        ),
-      )
-      if (signature.status !== 'Valid' || signature.thumbprint !== source.signerThumbprint)
-        throw new Error('Harness 官方签名验证失败，安装程序未启动')
       await command(archive, [], { ...options, timeout: 3600000 })
       await this.scan()
       while (!this.scanner.discovered.harness) {

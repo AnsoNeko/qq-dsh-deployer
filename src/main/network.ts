@@ -62,8 +62,9 @@ export function request(
     req.on('error', reject)
   })
 }
-export async function remoteJson(url: string, proxy = ''): Promise<any> {
-  const response = await request(url, proxy, AbortSignal.timeout(20000))
+export async function remoteText(url: string, proxy = '', signal?: AbortSignal): Promise<string> {
+  const timeout = AbortSignal.timeout(20000)
+  const response = await request(url, proxy, signal ? AbortSignal.any([signal, timeout]) : timeout)
   const chunks: Buffer[] = []
   let bytes = 0
   for await (const chunk of response) {
@@ -74,7 +75,10 @@ export async function remoteJson(url: string, proxy = ''): Promise<any> {
     }
     chunks.push(chunk)
   }
-  return JSON.parse(Buffer.concat(chunks).toString())
+  return Buffer.concat(chunks).toString()
+}
+export async function remoteJson(url: string, proxy = '', signal?: AbortSignal): Promise<any> {
+  return JSON.parse(await remoteText(url, proxy, signal))
 }
 export async function sha256(file: string): Promise<string> {
   const hash = crypto.createHash('sha256')
@@ -88,13 +92,19 @@ export async function download(
   proxy: string,
   signal: AbortSignal,
   progress: (n: number) => void,
-): Promise<void> {
+  options: {
+    verifyChanged?: (file: string, actualHash: string) => Promise<void>
+    fresh?: boolean
+  } = {},
+): Promise<string> {
+  signal.throwIfAborted()
   if (!/^[a-f0-9]{64}$/i.test(hash)) throw new Error('发行清单未锁定校验值，禁止执行下载内容')
+  hash = hash.toLowerCase()
   await fs.mkdir(path.dirname(dest), { recursive: true })
   if (await fs.stat(dest).catch(() => null)) {
-    if ((await sha256(dest)) === hash) {
+    if (!options.fresh && (await sha256(dest)) === hash) {
       progress(100)
-      return
+      return hash
     }
     await fs.rm(dest)
   }
@@ -112,9 +122,17 @@ export async function download(
       }
     })
     await pipeline(response, createWriteStream(part), { signal })
-    if ((await sha256(part)) !== hash) throw new Error('SHA-256 校验失败，文件未执行')
+    const actualHash = await sha256(part)
+    signal.throwIfAborted()
+    if (actualHash !== hash) {
+      if (!options.verifyChanged) throw new Error('SHA-256 校验失败，文件未执行')
+      // A changed payload must pass an independent official verification before promotion.
+      await options.verifyChanged(part, actualHash)
+    }
+    signal.throwIfAborted()
     await fs.rename(part, dest)
     progress(100)
+    return actualHash
   } finally {
     await fs.rm(part, { force: true }).catch(() => {})
   }

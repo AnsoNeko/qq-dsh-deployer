@@ -95,7 +95,7 @@ describe('GitHub app update policies', () => {
         },
       ],
     })
-    vi.mocked(download).mockResolvedValue(undefined)
+    vi.mocked(download).mockResolvedValue('a'.repeat(64))
     const manager = new AppUpdates(
       'cache',
       () => {},

@@ -49,7 +49,7 @@ pwsh -NoProfile -Command '$PSVersionTable.PSVersion'
 | PowerShell 7  | 检测及独立安装，可选追加用户 PATH                                                              |
 | Git           | 检测与版本查询；归档部署无需 Git                                                               |
 | QQ            | 检测、打开已有客户端；登录状态以网关为依据，不自动安装 QQ                                      |
-| Harness       | 下载锁定摘要且签名有效的官方安装程序，通过官方向导安装                                         |
+| Harness       | 下载官方当前安装程序，验证数字签名和发布者，通过官方向导安装                                   |
 | SnowLuma      | 在已取得相关书面授权范围内官方下载、校验、解压；用户完成首次设置和登录                         |
 | QQ Bridge     | 固定提交归档、`npm ci` 及 postinstall，保留 config/state/roles/audio；工具管理版本支持失败恢复 |
 | preset / MCP  | 使用官方桌面版命令管理 desktop 插件，保留其他插件，配置前备份                                  |
@@ -58,7 +58,9 @@ pwsh -NoProfile -Command '$PSVersionTable.PSVersion'
 
 ## 版本与连接
 
-发行清单在 `resources/catalog.json`，记录固定版本、下载地址、SHA-256，以及 Harness 官方安装程序的签名指纹。官方下载链接变更内容后，摘要不一致将停止安装，需要维护者重新核验并更新清单。工具不会把“官方最新”自动当成“已兼容”。
+发行清单在 `resources/catalog.json`，记录固定版本、下载地址、SHA-256，以及 Harness 官方安装程序的发布者和签名指纹。下载内容与内置摘要不同时，助手自动重新核验官方来源：PowerShell / SnowLuma 核对相同发行标签、相同下载文件的 GitHub SHA-256，Node.js 核对对应版本的官方 `SHASUMS256.txt`。核验通过后继续安装，并记录实际摘要；官方摘要缺失、查询失败或仍不匹配时停止安装，可重试或更新助手。
+
+Harness 使用指向官方当前版本的下载地址，每次部署重新下载，避免复用旧安装包；摘要变化时通过 Windows Authenticode 验证签名有效性，并匹配内置证书指纹或同一官方发布者，支持官方正常换证。安装前确认实际版本不低于内置版本，并写入部署日志。QQ Bridge 使用固定提交归档，仍严格核对内置摘要。工具不会把“官方最新”自动当成“已兼容”。
 
 - 桥接 v0.2.1-r1 的上游声明适配 Harness 0.2.0-rc.2 / 0.2.1-rc.2。
 - SnowLuma 2.1.1 组合的实际 QQ 往返仍需用户实测。

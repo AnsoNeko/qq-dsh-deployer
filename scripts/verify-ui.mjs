@@ -42,7 +42,7 @@ try {
   await page.getByRole('button', { name: '开始环境检测', exact: true }).waitFor()
   const capture = async (name) => {
     const file = path.join(output, name)
-    await page.screenshot({ path: file })
+    await page.screenshot({ path: file, animations: 'disabled', timeout: 60000 })
     report.screenshots.push(file)
   }
   check(
