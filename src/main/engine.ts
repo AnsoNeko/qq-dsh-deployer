@@ -32,6 +32,7 @@ import { downloadComponent } from './sources'
 import { readSnowLumaLogin } from './snowluma'
 import { readBridgeLogin } from './bridge'
 import { mergeDetectedConnections, selectOneBotEndpoint } from './connections'
+import * as tts from './tts'
 import type {
   AppUpdate,
   ComponentResult,
@@ -43,6 +44,7 @@ import type {
   Settings,
   Snapshot,
   Task,
+  TtsPlan,
 } from '../shared/types'
 
 export class Engine {
@@ -50,7 +52,7 @@ export class Engine {
   logs: LogEntry[] = []
   task: Task | null = null
   appUpdate?: AppUpdate
-  version = '0.1.3'
+  version = '0.2.0'
   owned: Partial<Record<'bridge' | 'snowluma' | 'harness', ChildProcess>> = {}
   private aborter?: AbortController
   private waiter?: () => void
@@ -58,6 +60,10 @@ export class Engine {
   private scanning?: Promise<ComponentResult[]>
   private mutating = false
   private bridgeRollback?: { target: string; previous: string }
+  private ttsPlan?: TtsPlan
+  private ttsDeployment = false
+  private ttsDevice = 'cpu'
+  private ttsFingerprint = ''
   constructor(
     readonly store: Store,
     readonly catalog: any,
@@ -96,6 +102,7 @@ export class Engine {
       ),
       version: this.version,
       appUpdate: this.appUpdate,
+      ttsScan: this.ttsPlan?.scan,
     }
   }
   private notificationPending = false
@@ -148,6 +155,41 @@ export class Engine {
     this.log('官方版本查询完成；查询失败的组件已单独标记')
     this.emit()
     return result
+  }
+  async scanTts(): Promise<TtsPlan> {
+    const settings = { ...this.store.settings }
+    const plan = await tts.scanTts(settings, this.store.root)
+    this.ttsPlan = plan
+    this.ttsFingerprint = JSON.stringify(settings)
+    this.log(
+      `语音部署扫描完成：${plan.scan.blockers.length ? '有阻止项，请处理后重扫' : plan.scan.device + ' 可部署'}`,
+    )
+    this.emit()
+    return plan
+  }
+  async deployTts(accept: boolean): Promise<void> {
+    if (this.mutating || (this.task && ['running', 'waiting'].includes(this.task.state)))
+      throw new Error('已有任务运行中')
+    if (!accept) throw new Error('请先确认语音部署预览与设备性能提示')
+    if (
+      !this.ttsPlan ||
+      this.ttsFingerprint !== JSON.stringify(this.store.settings) ||
+      Date.now() - Date.parse(this.ttsPlan.scan.scannedAt) > 10 * 60 * 1000
+    )
+      throw new Error('请先扫描当前语音安装目录与设备，扫描结果有效期为 10 分钟')
+    if (this.ttsPlan.scan.blockers.length) throw new Error(this.ttsPlan.scan.blockers.join('；'))
+    this.ttsDeployment = true
+    this.request = undefined
+    this.task = {
+      id: crypto.randomUUID(),
+      title: '本地语音模型部署',
+      state: 'running',
+      startedAt: new Date().toISOString(),
+      steps: tts.ttsSteps.map((step) => ({ ...step, state: 'pending' })),
+    }
+    this.aborter = new AbortController()
+    this.emit()
+    void this.runTask()
   }
   private resolveSettings(s = this.store.settings): Settings {
     const d = this.scanner.discovered
@@ -362,6 +404,8 @@ export class Engine {
   validateSettings(s: Settings): Settings {
     assertDirectory(s.installRoot)
     assertDirectory(s.dshHome)
+    assertDirectory(s.ttsRoot)
+    if (!['auto', 'cpu'].includes(s.ttsMode)) throw new Error('语音运行模式无效')
     localUrl(s.dshUrl)
     localUrl(s.httpUrl)
     localUrl(s.wsUrl, ['ws:', 'wss:'])
@@ -507,6 +551,7 @@ export class Engine {
     const plan = await this.preview(request)
     if (plan.request.actions.includes('snowluma') && !request.acceptUnverified)
       throw new Error('请确认版本待实测提示后再开始')
+    this.ttsDeployment = false
     this.request = plan.request
     const previous = resume ? this.task : null
     this.task = {
@@ -548,7 +593,22 @@ export class Engine {
           step.progress = n
           this.emit()
         }
-        if (step.id === 'sync-environment') {
+        if (step.id === 'tts-scan') {
+          const plan = await this.scanTts()
+          signal.throwIfAborted()
+          if (plan.scan.blockers.length) throw new Error(plan.scan.blockers.join('；'))
+          this.ttsDevice = plan.scan.device
+        } else if (step.id.startsWith('tts-')) {
+          await tts.installTtsStage(
+            step.id,
+            this.store.settings,
+            this.store.root,
+            this.ttsDevice,
+            signal,
+            (line) => this.log(line),
+            progress,
+          )
+        } else if (step.id === 'sync-environment') {
           if (this.request?.actions.includes('plugins')) {
             await this.startService('harness')
             await this.scan()
@@ -564,13 +624,18 @@ export class Engine {
           }
           await this.applyDetectedEnvironment(signal, true)
         } else await this.perform(step.id as DeployAction, signal, progress)
+        signal.throwIfAborted()
         step.state = 'done'
         step.progress = 100
         await this.persistTask()
       }
       this.bridgeRollback = undefined
       task.state = 'done'
-      this.log('所选部署步骤已完成。登录、连接检查与 QQ 消息往返仍需分别验证。')
+      this.log(
+        this.ttsDeployment
+          ? '本地语音模型已通过离线短语音测试，接入说明在模型目录 README.md，请通过已部署的 dsh 自行接入。'
+          : '所选部署步骤已完成。登录、连接检查与 QQ 消息往返仍需分别验证。',
+      )
     } catch (e: any) {
       task.state = signal.aborted ? 'cancelled' : 'failed'
       task.error = redact(e.message || String(e))
@@ -597,7 +662,8 @@ export class Engine {
     } finally {
       this.waiter = undefined
       await this.persistTask()
-      await this.scan().catch((e) => this.log(e.message, 'warn'))
+      if (this.ttsDeployment) await this.scanTts().catch((e) => this.log(e.message, 'warn'))
+      else await this.scan().catch((e) => this.log(e.message, 'warn'))
     }
   }
   async wait(detail: string, signal: AbortSignal): Promise<void> {
@@ -635,6 +701,13 @@ export class Engine {
     this.log('已请求取消；正在停止当前下载或安装子进程', 'warn')
   }
   async retry(): Promise<void> {
+    if (this.ttsDeployment) {
+      if (this.mutating || (this.task && ['running', 'waiting'].includes(this.task.state)))
+        throw new Error('已有任务运行中')
+      await this.scanTts()
+      await this.deployTts(true)
+      return
+    }
     if (!this.request) throw new Error('应用重启后请重新预览部署')
     await this.deploy(this.request, true)
   }

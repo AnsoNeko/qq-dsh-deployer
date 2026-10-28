@@ -5,6 +5,27 @@ export const releaseRepository = {
 }
 export const projects = [
   {
+    id: 'qwen-tts',
+    name: 'Qwen3-TTS',
+    role: '进阶部署目标 · 本地语音模型与运行库',
+    license: 'Apache-2.0',
+    url: 'https://github.com/QwenLM/Qwen3-TTS',
+  },
+  {
+    id: 'qwen-tts-model',
+    name: 'Qwen3-TTS CustomVoice 模型',
+    role: '1.7B 模型权重 · 本机部署后由用户通过 dsh 自行接入',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice',
+  },
+  {
+    id: 'uv',
+    name: 'uv / Python standalone',
+    role: '语音模型独立 Python 引导与依赖安装',
+    license: 'MIT / Apache-2.0；Python 及附带组件各自许可',
+    url: 'https://github.com/astral-sh/uv',
+  },
+  {
     id: 'repository',
     name: '本软件源码',
     role: '大肥鱼 QQ 部署助手 · 开发者：安索',

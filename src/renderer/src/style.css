@@ -2134,3 +2134,47 @@ progress {
     font-size: 9px;
   }
 }
+.tts-panel {
+  display: grid;
+  gap: 20px;
+}
+.tts-body {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+.tts-body h2,
+.tts-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tts-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tts-facts {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 14px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.tts-facts dt {
+  color: var(--muted);
+}
+.tts-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.tts-body details {
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.tts-body summary {
+  cursor: pointer;
+  font-weight: 600;
+}

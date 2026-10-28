@@ -44,10 +44,12 @@ import type {
 import { projects, releaseRepository } from '../../shared/projects'
 import { SnowLumaLoginPanel } from './SnowLumaLoginPanel'
 import { BridgeLoginPanel } from './BridgeLoginPanel'
+import { AdvancedTtsPanel } from './AdvancedTtsPanel'
 
 const nav: { id: Page; label: string; sub: string; icon: typeof Activity }[] = [
   { id: 'overview', label: '环境总览', sub: '检查安装与连接', icon: LayoutDashboard },
   { id: 'deploy', label: '快速部署', sub: '按需补齐组件', icon: ArrowDownToLine },
+  { id: 'advanced', label: '进阶功能', sub: '本地语音模型部署', icon: Wrench },
   { id: 'config', label: '连接配置', sub: '账号与访问范围', icon: Settings2 },
   { id: 'services', label: '运行管理', sub: '启动与健康状态', icon: Activity },
   { id: 'logs', label: '日志诊断', sub: '定位与恢复问题', icon: FileText },
@@ -250,6 +252,7 @@ export default function App() {
   const blockers = components.filter((r) => !r.optional && ['missing', 'error'].includes(r.state))
   const ready = components.filter((r) => r.state === 'ok').length
   const task = snap?.task
+  const isTtsTask = !!task?.steps.some((step) => step.id.startsWith('tts-'))
   if (!api)
     return (
       <div className="boot">
@@ -392,11 +395,13 @@ export default function App() {
                   ? 'ENVIRONMENT'
                   : page === 'deploy'
                     ? 'DEPLOYMENT'
-                    : page === 'config'
-                      ? 'CONNECTION'
-                      : page === 'services'
-                        ? 'RUNTIME'
-                        : 'DIAGNOSTICS'}
+                    : page === 'advanced'
+                      ? 'LOCAL VOICE'
+                      : page === 'config'
+                        ? 'CONNECTION'
+                        : page === 'services'
+                          ? 'RUNTIME'
+                          : 'DIAGNOSTICS'}
               </div>
               <h1>{title.label}</h1>
               <p>
@@ -404,11 +409,13 @@ export default function App() {
                   ? '从环境到连接，一眼掌握大肥鱼的部署状态。'
                   : page === 'deploy'
                     ? '只安装你需要的组件，每一步都有据可查。'
-                    : page === 'config'
-                      ? '连接你的 Harness 与 QQ，明确机器人可以回应的范围。'
-                      : page === 'services'
-                        ? '集中管理服务，区分启动状态与实际连接健康。'
-                        : '查看运行记录、导出诊断，或恢复之前的配置。'}
+                    : page === 'advanced'
+                      ? '扫描设备后，独立部署 Qwen3-TTS 本地语音模型。'
+                      : page === 'config'
+                        ? '连接你的 Harness 与 QQ，明确机器人可以回应的范围。'
+                        : page === 'services'
+                          ? '集中管理服务，区分启动状态与实际连接健康。'
+                          : '查看运行记录、导出诊断，或恢复之前的配置。'}
               </p>
             </div>
             <div className="heading-actions">
@@ -445,7 +452,7 @@ export default function App() {
                   <Download size={15} />
                   导出诊断
                 </Button>
-              ) : (
+              ) : page === 'advanced' ? null : (
                 <Button ghost onClick={() => setPage('config')}>
                   设置安装位置
                   <ArrowRight size={15} />
@@ -858,6 +865,19 @@ export default function App() {
                 </div>
               </div>
             )}
+          </section>
+          <section hidden={page !== 'advanced'} aria-label="进阶功能">
+            <AdvancedTtsPanel
+              settings={draft}
+              active={active}
+              busy={busy}
+              change={change}
+              save={() => save(false)}
+              run={run}
+              latestScan={snap.ttsScan}
+            />
+          </section>
+          <section hidden={page !== (isTtsTask ? 'advanced' : 'deploy')} aria-label="部署任务">
             {task && (
               <div className="panel task-panel">
                 <div className="panel-heading">
@@ -865,7 +885,9 @@ export default function App() {
                     <h2>部署步骤</h2>
                     <span>
                       {task.state === 'done'
-                        ? '所选安装步骤完成，连接及消息往返仍需验证'
+                        ? isTtsTask
+                          ? '模型已通过短语音测试，请将模型目录 README.md 交给 dsh 接入'
+                          : '所选安装步骤完成，连接及消息往返仍需验证'
                         : task.state === 'failed'
                           ? '遇到问题，可修复后重试'
                           : '操作与输出实时更新'}
@@ -912,7 +934,9 @@ export default function App() {
                           : step.state === 'waiting'
                             ? '等待操作'
                             : step.state === 'running'
-                              ? `${step.progress || 0}%`
+                              ? isTtsTask && typeof step.progress !== 'number'
+                                ? '执行中'
+                                : `${step.progress || 0}%`
                               : step.state === 'failed'
                                 ? '失败'
                                 : step.state === 'cancelled'
@@ -1351,7 +1375,9 @@ export default function App() {
                     ? '等待你的操作'
                     : '部署任务进行中'
                   : task?.state === 'done'
-                    ? '安装步骤完成 · 请继续验证连接'
+                    ? isTtsTask
+                      ? '语音模型部署完成 · 通过 dsh 自行接入'
+                      : '安装步骤完成 · 请继续验证连接'
                     : task?.state === 'failed'
                       ? '部署遇到问题'
                       : '准备就绪'}
@@ -1381,7 +1407,10 @@ export default function App() {
               </Button>
             )}
             {task && (
-              <button className="text-link" onClick={() => setPage('deploy')}>
+              <button
+                className="text-link"
+                onClick={() => setPage(isTtsTask ? 'advanced' : 'deploy')}
+              >
                 查看步骤
                 <ChevronRight size={13} />
               </button>

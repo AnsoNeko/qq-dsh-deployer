@@ -1,0 +1,71 @@
+{
+  "uv": {
+    "url": "https://github.com/astral-sh/uv/releases/download/0.9.7/uv-x86_64-pc-windows-msvc.zip",
+    "version": "0.9.7",
+    "sha256": "5d250c32d3604e28dbe18dc65c668ff628c53e00dde2c642576e831e4a60da64"
+  },
+  "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
+  "modelId": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "huggingfaceHub": "0.36.0",
+  "files": [
+    {
+      "path": "config.json",
+      "sha256": "17a07f527a1c25ea30b4e023a184482a23d3e279d697b1dc81b1bde498d29cf9",
+      "bytes": 4908
+    },
+    {
+      "path": "generation_config.json",
+      "sha256": "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa",
+      "bytes": 245
+    },
+    {
+      "path": "merges.txt",
+      "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+      "bytes": 1671839
+    },
+    {
+      "path": "model.safetensors",
+      "sha256": "38b1d5971bdbd982b561cccec982669a53b0537c3cf5e9bd4778ed07bb2f5137",
+      "bytes": 3833402552
+    },
+    {
+      "path": "preprocessor_config.json",
+      "sha256": "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119",
+      "bytes": 127
+    },
+    {
+      "path": "speech_tokenizer/config.json",
+      "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167",
+      "bytes": 2336
+    },
+    {
+      "path": "speech_tokenizer/configuration.json",
+      "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd",
+      "bytes": 76
+    },
+    {
+      "path": "speech_tokenizer/model.safetensors",
+      "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
+      "bytes": 682293092
+    },
+    {
+      "path": "speech_tokenizer/preprocessor_config.json",
+      "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb",
+      "bytes": 234
+    },
+    {
+      "path": "tokenizer_config.json",
+      "sha256": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670",
+      "bytes": 7344
+    },
+    {
+      "path": "vocab.json",
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+      "bytes": 2776833
+    }
+  ],
+  "torch": "2.8.0",
+  "qwenTts": "0.1.1",
+  "torchaudio": "2.8.0",
+  "python": "3.12.12"
+}

@@ -28,6 +28,8 @@ let quitting = false
 const settingsSchema = z
   .object({
     installRoot: z.string().min(3).max(1000),
+    ttsRoot: z.string().min(3).max(1000),
+    ttsMode: z.enum(['auto', 'cpu']),
     dshHome: z.string().min(3).max(1000),
     nodePath: z.string().max(1000),
     harnessPath: z.string().max(1000),
@@ -113,6 +115,8 @@ async function start(): Promise<void> {
   const handlers: Record<string, (arg?: any) => any> = {
     snapshot: () => engine.snapshot(),
     scan: () => engine.scan(),
+    scanTts: () => engine.scanTts(),
+    deployTts: (accept) => engine.deployTts(z.boolean().parse(accept)),
     updates: () => engine.updates(),
     checkAppUpdate: () => updater.check(),
     installAppUpdate: async () => {
@@ -177,7 +181,9 @@ async function start(): Promise<void> {
     restore: (id) => engine.restore(z.string().uuid().parse(id)),
     open: (target) =>
       openTarget(
-        z.enum(['harness', 'snowluma', 'bridge', 'qq', 'data', 'docs', 'snow-docs']).parse(target),
+        z
+          .enum(['harness', 'snowluma', 'bridge', 'qq', 'data', 'docs', 'snow-docs', 'tts'])
+          .parse(target),
       ),
     exportDiagnostics: async () => {
       const file = await dialog.showSaveDialog(window!, {
@@ -332,6 +338,11 @@ function createTray(): void {
 }
 async function openTarget(target: OpenTarget): Promise<void> {
   const s = engine.store.settings
+  if (target === 'tts') {
+    const error = await shell.openPath(s.ttsRoot)
+    if (error) throw new Error(error)
+    return
+  }
   if (target === 'docs') {
     await shell.openExternal('https://github.com/Derpyu520/qq-bridge')
     return

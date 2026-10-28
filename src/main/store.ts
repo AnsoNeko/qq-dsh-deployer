@@ -32,6 +32,8 @@ export class Store {
       qqPath: '',
       pwshPath: '',
       registerPwshPath: true,
+      ttsRoot: path.join(this.root, 'advanced', 'qwen3-tts'),
+      ttsMode: 'auto',
       dshUrl: 'http://127.0.0.1:3080',
       httpUrl: 'http://127.0.0.1:3000',
       wsUrl: 'ws://127.0.0.1:3001',

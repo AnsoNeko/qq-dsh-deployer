@@ -43,6 +43,19 @@ pwsh -NoProfile -Command '$PSVersionTable.PSVersion'
 
 ## 各组件处理方式
 
+### 进阶功能：本地语音模型
+
+“进阶功能”可独立部署 [Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice)，使用[官方 Qwen3-TTS 运行库](https://github.com/QwenLM/Qwen3-TTS)。此功能只安装环境、模型并生成一段测试音频；QQ鱼的具体接入由用户通过已部署的 dsh 自行完成。
+
+1. 选择**语音模型独立安装目录**。默认 `%LOCALAPPDATA%\QQDshDeployer\advanced\qwen3-tts`，与原 `components` 分开。可选其他磁盘的空目录；不能与现有组件或 dsh 数据目录相同、互相包含。已有完成部署和非助手管理内容不会被覆盖。
+2. 选择 NVIDIA GPU 或显式 CPU 模式，点击“扫描设备并预览部署”。扫描检查 Windows x64、CPU、总内存 / 可用内存、目标磁盘空间、NVIDIA 显卡显存 / 空闲显存 / 计算能力 / 驱动。扫描本身不创建模型目录；扫描前只保存助手选项，不修改桥接配置。
+3. 查看阻止项、性能提示、下载来源和变更范围后确认部署。结果有效期 10 分钟，执行前再扫描。助手保守阈值为内存 16 GiB、当前可用内存 8 GiB、磁盘可用 25 GiB；GPU 要求显存 8 GiB、空闲显存 7 GiB、计算能力 7.0、驱动 572.61，CPU 模式要求内存 24 GiB。这些是**助手的部署策略，不是官方最低配置或实时性能保证**。
+4. 安装过程下载并校验固定版本 uv，安装独立 Python 3.12.12 和虚拟环境，再安装 PyTorch / torchaudio 2.8.0、qwen-tts 0.1.1。GPU 使用官方 cu128 wheel，CPU 使用 CPU wheel；不自动安装显卡驱动或 FlashAttention。依赖从 PyPI / PyTorch 官方索引解析，实际版本保存在 `requirements-resolved.txt`。下载代理使用“连接配置”中的 HTTP(S) 代理。
+5. 模型固定到 `src/shared/tts-catalog.json` 中的提交，每个必要文件校验 SHA-256，包含语音 tokenizer。权重下载约 4.21 GiB，另需 Python、PyTorch 和依赖空间。模型加载强制离线，使用 SDPA，生成 `sample.wav` 成功后才记录部署完成。
+6. 将模型目录中的 `README.md` 路径交给 dsh，根据说明用独立 Python 调用 `synthesize.py --text-file ... --output ...` 生成 WAV。目录内提供 `runtime.json`、依赖版本和固定模型清单供接入使用。助手不注册服务、不自动监听端口、不改写 QQ Bridge / dsh 配置。短音频通过不代表 QQ 语音消息链路已经通过验收。
+
+安装、下载、临时文件和缓存均保存在该独立目录。离开页面后底栏仍显示任务，可查看步骤或取消。失败 / 取消可重新扫描后重试并复用未损坏的下载；应用重启后从进阶入口重新扫描。已完成的环境需要重新部署时，请换一个新空目录。
+
 | 组件          | 首版行为                                                                                       |
 | ------------- | ---------------------------------------------------------------------------------------------- |
 | Node.js / npm | 检测现有版本，或安装专用运行时；不修改系统 PATH                                                |

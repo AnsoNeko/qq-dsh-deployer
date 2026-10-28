@@ -11,7 +11,7 @@ export const componentIds = [
 ] as const
 export type ComponentId = (typeof componentIds)[number]
 export type Health = 'ok' | 'missing' | 'stopped' | 'waiting' | 'error' | 'unknown'
-export type Page = 'overview' | 'deploy' | 'config' | 'services' | 'logs'
+export type Page = 'overview' | 'deploy' | 'advanced' | 'config' | 'services' | 'logs'
 export interface Candidate {
   path: string
   version?: string
@@ -52,6 +52,8 @@ export interface Settings {
   firstRun: boolean
   pwshPath: string
   registerPwshPath: boolean
+  ttsRoot: string
+  ttsMode: 'auto' | 'cpu'
 }
 export interface ConfigInput {
   settings: Settings
@@ -120,6 +122,40 @@ export interface Snapshot {
   owned: Partial<Record<'bridge' | 'snowluma' | 'harness', number>>
   version: string
   appUpdate?: AppUpdate
+  ttsScan?: TtsScan
+}
+export interface TtsGpu {
+  index: number
+  name: string
+  memoryMiB: number
+  freeMiB: number
+  driver: string
+  compute: number
+}
+export interface TtsScan {
+  scannedAt: string
+  root: string
+  mode: 'auto' | 'cpu'
+  platform: string
+  arch: string
+  cpu: string
+  ramGiB: number
+  availableRamGiB: number
+  diskFreeGiB?: number
+  gpus: TtsGpu[]
+  device: string
+  blockers: string[]
+  warnings: string[]
+  installed: boolean
+  installationDetail: string
+}
+export interface TtsPlan {
+  scan: TtsScan
+  modelId: string
+  revision: string
+  downloadGiB: number
+  sources: string[]
+  steps: { id: string; title: string }[]
 }
 export interface AppUpdate {
   state: 'idle' | 'checking' | 'current' | 'downloading' | 'downloaded' | 'error'
@@ -129,7 +165,15 @@ export interface AppUpdate {
   detail: string
   mode: 'installer' | 'portable' | 'development'
 }
-export type OpenTarget = 'harness' | 'snowluma' | 'bridge' | 'qq' | 'data' | 'docs' | 'snow-docs'
+export type OpenTarget =
+  | 'harness'
+  | 'snowluma'
+  | 'bridge'
+  | 'qq'
+  | 'data'
+  | 'docs'
+  | 'snow-docs'
+  | 'tts'
 export type SnowLumaLogin =
   | { state: 'ready'; username: 'admin'; password: string; detail: string }
   | { state: 'waiting' | 'changed' | 'unavailable'; detail: string }
@@ -139,6 +183,8 @@ export type BridgeLogin =
 export interface DeployerAPI {
   snapshot(): Promise<Snapshot>
   scan(): Promise<ComponentResult[]>
+  scanTts(): Promise<TtsPlan>
+  deployTts(accept: boolean): Promise<void>
   updates(): Promise<ComponentResult[]>
   saveConfig(input: ConfigInput): Promise<Settings>
   choosePath(kind: 'file' | 'directory'): Promise<string | null>

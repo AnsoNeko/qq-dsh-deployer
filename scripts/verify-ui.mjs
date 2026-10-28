@@ -80,6 +80,44 @@ try {
   await page.keyboard.press('Escape')
   await about.waitFor({ state: 'hidden' })
   await capture(executablePath ? 'packaged-overview.png' : '01-overview.png')
+  await page.getByRole('button', { name: '进阶功能 本地语音模型部署' }).click()
+  const ttsRoot = page.getByLabel('语音模型独立安装目录', { exact: true })
+  const ttsSettings = (await page.evaluate(() => window.deployer.snapshot())).settings
+  check(
+    'TTS uses its own default outside components',
+    !ttsSettings.ttsRoot.startsWith(ttsSettings.installRoot),
+  )
+  await ttsRoot.fill(ttsSettings.installRoot)
+  await page.getByRole('button', { name: '扫描设备并预览部署' }).click()
+  await page.getByRole('heading', { name: '设备扫描与部署预览' }).waitFor()
+  check(
+    'TTS scan blocks component directory overlap',
+    (await page.getByLabel('进阶功能', { exact: true }).innerText()).includes('不能相同或互相包含'),
+  )
+  check(
+    'TTS installation blocked before valid scan and acknowledgement',
+    await page.getByRole('button', { name: '开始部署语音模型', exact: true }).isDisabled(),
+  )
+  await ttsRoot.fill(ttsSettings.ttsRoot)
+  await page.getByRole('button', { name: '运行管理 启动与健康状态' }).click()
+  await page.getByRole('button', { name: '进阶功能 本地语音模型部署' }).click()
+  check('TTS draft survives page navigation', (await ttsRoot.inputValue()) === ttsSettings.ttsRoot)
+  await page.getByRole('button', { name: '扫描设备并预览部署' }).click()
+  await page.getByRole('heading', { name: '设备扫描与部署预览' }).waitFor()
+  check(
+    'TTS scan preserves read-only model directory',
+    !(await fs.stat(ttsSettings.ttsRoot).catch(() => null)),
+  )
+  check(
+    'TTS preview identifies exact CustomVoice revision',
+    (await page.getByLabel('进阶功能', { exact: true }).innerText()).includes(
+      '0c0e3051f131929182e2c023b9537f8b1c68adfe',
+    ),
+  )
+  await capture('01-advanced-tts.png')
+  await page.setViewportSize({ width: 960, height: 690 })
+  await capture('01-advanced-tts-narrow.png')
+  await page.setViewportSize({ width: 1320, height: 840 })
   await page.getByRole('button', { name: '连接配置 账号与访问范围' }).click()
   const owner = page.getByLabel('管理员 QQ', { exact: true })
   await owner.fill('123456789')
@@ -388,6 +426,18 @@ http.createServer((req,res) => {
 } catch (error) {
   report.errors.push(error.message)
   const pages = app.windows()
+  if (pages[0])
+    report.failureState = await pages[0]
+      .evaluate(() => ({
+        heading: document.querySelector('h1')?.textContent,
+        activeNav: document.querySelector('.nav-item.active')?.textContent,
+        login: [...document.querySelectorAll('[role="region"]')].map((node) => ({
+          label: node.getAttribute('aria-label'),
+          text: node.textContent,
+          visible: !!node.getBoundingClientRect().height,
+        })),
+      }))
+      .catch(() => null)
   if (pages[0])
     await pages[0].screenshot({ path: path.join(output, 'failure.png') }).catch(() => {})
   await fs.writeFile(path.join(output, 'failure-report.json'), JSON.stringify(report, null, 2))

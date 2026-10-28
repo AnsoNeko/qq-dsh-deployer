@@ -6,6 +6,11 @@
 
 运行时下载组件独立适用原许可：
 
+- Qwen3-TTS 运行库与 CustomVoice 模型：Apache-2.0；https://github.com/QwenLM/Qwen3-TTS 和 https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+- uv：MIT / Apache-2.0；https://github.com/astral-sh/uv
+- uv 管理的 Python standalone：Python 及附带依赖各自许可；https://github.com/astral-sh/python-build-standalone
+- PyTorch / torchaudio 及 Python 依赖：以各安装包许可证为准；https://github.com/pytorch/pytorch 和 https://github.com/pytorch/audio
+
 - Node.js：https://github.com/nodejs/node/blob/main/LICENSE
 - PowerShell：https://github.com/PowerShell/PowerShell/blob/master/LICENSE.txt
 - DeepSeek Harness：https://github.com/deepseek-ai/deepseek-harness/blob/master/LICENSE

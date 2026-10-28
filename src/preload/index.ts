@@ -4,6 +4,8 @@ const invoke = (name: string, input?: unknown) => ipcRenderer.invoke(`deployer:$
 const api: DeployerAPI = {
   snapshot: () => invoke('snapshot'),
   scan: () => invoke('scan'),
+  scanTts: () => invoke('scanTts'),
+  deployTts: (accept) => invoke('deployTts', accept),
   updates: () => invoke('updates'),
   checkAppUpdate: () => invoke('checkAppUpdate'),
   installAppUpdate: () => invoke('installAppUpdate'),
