@@ -13,6 +13,8 @@
 - 安装版 SHA-256：`406e2c0520d59db67036b69b2cf18e1f630496bfc1bd0e5cfcbaba50f19ed7dd`。
 - 便携版 SHA-256：`56b21f972db6f3188751ef87b3f122260ee97e52404fc2d8177a06a70301ef38`。
 - 机器相关报告和截图保留在本地 `output/acceptance` 与 `output/playwright`。
+- 已正式发布为 [v0.2.0](https://github.com/AnsoNeko/qq-dsh-deployer/releases/tag/v0.2.0)，GitHub Latest，非 Draft / Prerelease。发行源码提交为 `e562064`。
+- 5 个附件均从 Draft 重新下载，其大小、SHA-256 与本地文件及 GitHub 摘要全部一致。发布后再次核对公开 Release、5 个附件和 `latest.yml`，实际打包程序通过 GitHub provider 查询到最新正式版 `0.2.0`，显示“当前已是最新正式版本”。
 
 ---
 
